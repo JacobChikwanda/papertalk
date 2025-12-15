@@ -31,6 +31,7 @@ interface DashboardHeaderProps {
 export function DashboardHeader({ user }: DashboardHeaderProps) {
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [showNotifications, setShowNotifications] = useState(false)
+  const [notificationCount] = useState(0) // TODO: Implement actual notification fetching
   const userMenuRef = useRef<HTMLDivElement>(null)
   const notificationsRef = useRef<HTMLDivElement>(null)
 
@@ -93,9 +94,11 @@ export function DashboardHeader({ user }: DashboardHeaderProps) {
             aria-label="Notifications"
           >
             <Bell className="h-5 w-5" />
-            <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-medium text-white">
-              2
-            </span>
+            {notificationCount > 0 && (
+              <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-medium text-white">
+                {notificationCount}
+              </span>
+            )}
           </Button>
           {showNotifications && (
             <div className="absolute right-0 top-12 w-80 rounded-lg border border-zinc-200 bg-white shadow-lg dark:border-zinc-800 dark:bg-zinc-900">
