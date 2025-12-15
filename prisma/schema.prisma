@@ -1,0 +1,161 @@
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  ORG_ADMIN
+  TEACHER
+  STUDENT
+}
+
+model Organization {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  name      String
+  domain    String?  // Optional domain for organization
+  settings  Json?    // Flexible settings storage
+
+  users     User[]
+  courses   Course[]
+  tests     Test[]
+  submissions Submission[]
+
+  @@index([name])
+}
+
+model User {
+  id             String       @id @default(uuid())
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  email          String       @unique
+  name           String
+  role           UserRole
+  organizationId String
+  supabaseUserId String?      @unique // Link to Supabase Auth user
+  disabled       Boolean      @default(false)
+  voiceId        String?      // ElevenLabs cloned voice ID (if user has cloned their voice)
+  voiceSettings  Json?        // Voice preferences (gender, speed, etc.)
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  courses        Course[]     // Courses created by this teacher
+  tests          Test[]       // Tests created by this teacher
+  submissions    Submission[] // Submissions made by this student
+
+  @@index([organizationId])
+  @@index([email])
+  @@index([role, organizationId])
+}
+
+model Course {
+  id             String   @id @default(uuid())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  name           String
+  description    String?
+  organizationId String
+  teacherId      String
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  teacher        User         @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  tests          Test[]
+
+  @@index([organizationId])
+  @@index([teacherId])
+}
+
+model Test {
+  id             String   @id @default(uuid())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  name           String
+  description    String?
+  courseId       String
+  teacherId      String
+  organizationId String
+
+  course         Course      @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  teacher        User        @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  testPaper      TestPaper?
+  magicLinks     MagicLink[]
+  submissions    Submission[]
+
+  @@index([organizationId])
+  @@index([courseId])
+  @@index([teacherId])
+}
+
+model TestPaper {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  testId    String   @unique
+  fileUrl   String   // Supabase Storage URL
+  fileName  String
+
+  test      Test     @relation(fields: [testId], references: [id], onDelete: Cascade)
+}
+
+model MagicLink {
+  id          String   @id @default(uuid())
+  createdAt   DateTime @default(now())
+  token       String   @unique
+  testId      String
+  expiresAt   DateTime?
+  used        Boolean  @default(false) // Track if link has been used (for analytics)
+  usedAt      DateTime?
+
+  test        Test         @relation(fields: [testId], references: [id], onDelete: Cascade)
+  submissions Submission[] // Multiple submissions can use the same link
+
+  @@index([token])
+  @@index([testId])
+  @@index([used])
+}
+
+model Submission {
+  id               String   @id @default(uuid())
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  studentName      String
+  studentEmail     String
+  status           String   @default("pending") // 'pending' | 'graded'
+  processingStatus String   @default("pending") // 'pending' | 'processing_ai' | 'ready' | 'graded' | 'generating_audio'
+  imageUrls        String[] // Array of Supabase Storage URLs
+  mergedImageUrl   String?  // Merged PDF/image URL (server-generated)
+  aiFeedback       String?  @db.Text // The large text draft
+  finalScore       Int?
+  audioUrl         String?
+  submittedBy      String   @default("student") // 'student' | 'teacher'
+  feedbackApproved Boolean  @default(false) // Whether teacher has approved feedback
+  feedbackSent     Boolean  @default(false) // Whether feedback has been sent to student
+  feedbackSentAt   DateTime? // When feedback was sent
+  voiceId          String?  // ElevenLabs voice ID used for audio generation
+  
+  // New relationships
+  testId         String?
+  studentId      String?  // Link to User if student is registered
+  organizationId String?
+  magicLinkId    String?  // Remove unique constraint - multiple submissions can use same link
+
+  test           Test?      @relation(fields: [testId], references: [id], onDelete: SetNull)
+  student        User?      @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  magicLink      MagicLink? @relation(fields: [magicLinkId], references: [id], onDelete: SetNull)
+
+  @@unique([testId, studentEmail]) // Prevent duplicate student submissions per test
+  @@index([organizationId])
+  @@index([testId])
+  @@index([studentId])
+  @@index([status])
+  @@index([processingStatus])
+  @@index([magicLinkId])
+  @@index([feedbackApproved])
+  @@index([feedbackSent])
+}
+
